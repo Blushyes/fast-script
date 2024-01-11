@@ -2,7 +2,7 @@ from functools import reduce
 import requests
 from lxml import etree
 from typing import Any, Collection, Callable
-from sweet import import_from_string
+from .sweet import import_from_string
 
 
 def html_xpath_crawler(url: str, xpath: str, **kwargs) -> Any:

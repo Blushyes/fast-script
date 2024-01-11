@@ -21,6 +21,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install build
+      - name: Replace package name
+        run: |
+          mv src fast_script_utils
       - name: Get the version tag
         id: get_version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT

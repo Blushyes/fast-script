@@ -9,5 +9,5 @@ setup(
     packages=find_packages(),
     long_description=long_description,
     long_description_content_type="text/markdown",
-    install_requires=[],  # 依赖列表，格式是 ['package>=version']
+    install_requires=["requests", "lxml"],  # 依赖列表，格式是 ['package>=version']
 )
