@@ -36,13 +36,13 @@ def list_files_recursive(
     directory: str = os.path.curdir,
     exclude: list[str] | str = None,
     file_filter: Callable[[FileInfo], list[FileInfo]] = None,
-    safely=False,
+    safely=True,
 ) -> list[FileInfo]:
     """递归列出所有的文件，默认为当前目录下面所有文件
 
     Args:
-        exclude: 排除哪个或者哪些文件，只是简单地排除某个文件名或者目录名。
-        file_filter: 过滤器，可以更自由地定义排除哪些文件。
+        exclude: 排除哪个或者哪些文件，只是简单地排除某个文件名或者目录名
+        file_filter: 过滤器，可以更自由地定义排除哪些文件
         safely: 如果为 true 则遇见异常的时候不会报错
 
     Returns:
