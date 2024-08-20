@@ -40,6 +40,8 @@ def list_files_recursive(
         Callable[[FileInfo], bool] | Collection[Callable[[FileInfo], bool]]
     ) = None,
     safely=True,
+    max_depth: int | None = 20,
+    follow_symlinks: bool = False,
 ) -> list[FileInfo]:
     """递归列出所有的文件，默认为当前目录下面所有文件
 
@@ -48,6 +50,8 @@ def list_files_recursive(
         exclude: 排除哪个或者哪些文件，只是简单地排除某个文件名或者目录名
         file_filter: 过滤器，可以更自由地定义排除哪些文件，可以是列表也可以是单个
         safely: 如果为 true 则遇见异常的时候不会报错
+        max_depth: 最大递归深度，默认为20，为None时为无限
+        follow_symlinks: 是否跟随符号链接
 
     Returns:
         收集到的所有文件信息
@@ -62,7 +66,12 @@ def list_files_recursive(
         file_filter = [file_filter]
 
     # 使用os.walk遍历目录
-    for root, _, files in os.walk(directory):
+    for root, _, files in os.walk(directory, topdown=True, followlinks=follow_symlinks):
+        if max_depth is not None:
+            depth = root[len(directory) :].count(os.sep)
+            if depth > max_depth:
+                continue
+
         for file in files:
             filename = os.path.basename(file)
 
@@ -127,6 +136,28 @@ class FileProcessChain:
         self._safely: bool = False
         self._exclude_files: list[str] = []
         self._filters: list[Callable[[FileInfo], bool]] = []
+        self._max_depth: int | None = 20
+        self._follow_symlinks = False
+
+    @staticmethod
+    def _convert_size(size: str) -> float:
+        # 类似mb和m这种顺序不能变
+        if "kb" in size.lower():
+            size = float(size.replace("kb", "")) * 1024
+        elif "k" in size.lower():
+            size = float(size.replace("k", "")) * 1024
+        elif "mb" in size.lower():
+            size = float(size.replace("mb", "")) * 1024**2
+        elif "m" in size.lower():
+            size = float(size.replace("m", "")) * 1024**2
+        elif "gb" in size.lower():
+            size = float(size.replace("gb", "")) * 1024**3
+        elif "g" in size.lower():
+            size = float(size.replace("g", "")) * 1024**3
+        elif "b" in size.lower():
+            size = float(size.replace("b", ""))
+
+        return size
 
     def path(self, path: str) -> "FileProcessChain":
         """
@@ -171,7 +202,12 @@ class FileProcessChain:
             raise Exception("path is required")
 
         return list_files_recursive(
-            self._path, self._exclude_files, self._filters, self._safely
+            self._path,
+            self._exclude_files,
+            self._filters,
+            self._safely,
+            self._max_depth,
+            self._follow_symlinks,
         )
 
     def safe_collect(self) -> list[FileInfo]:
@@ -179,3 +215,80 @@ class FileProcessChain:
         Final方法，默认safely
         """
         return self.safely().collect()
+
+    def include_extensions(self, *extensions: str) -> "FileProcessChain":
+        """
+        只包含特定扩展名的文件
+        """
+
+        return self.filter(
+            lambda info: any(info.name.endswith(ext) for ext in extensions)
+        )
+
+    def exclude_extensions(self, *extensions: str) -> "FileProcessChain":
+        """
+        排除特定扩展名的文件
+        """
+        return self.filter(
+            lambda info: not any(info.name.endswith(ext) for ext in extensions)
+        )
+
+    def min_size(self, size: int | str) -> "FileProcessChain":
+        """
+        只包含大于特定大小（字节）的文件
+
+        Args:
+            size:
+                - int 单位为b
+                - str 解析，如'1m', '2g', '3kb'
+        """
+        return self.filter(
+            lambda info: (
+                os.path.getsize(info.abspath)
+                >= (
+                    size
+                    if isinstance(size, int)
+                    else FileProcessChain._convert_size(size)
+                )
+            )
+        )
+
+    def max_size(self, size: int | str) -> "FileProcessChain":
+        """
+        只包含小于特定大小（字节）的文件
+
+        Args:
+            size:
+                - int 单位为b
+                - str 解析，如'1m', '2g', '3kb'
+        """
+        return self.filter(
+            lambda info: (
+                os.path.getsize(info.abspath)
+                <= (
+                    size
+                    if isinstance(size, int)
+                    else FileProcessChain._convert_size(size)
+                )
+            )
+        )
+
+    def max_depth(self, depth: int | None) -> "FileProcessChain":
+        """
+        设置最大递归深度，默认为20，为None时为无限深度
+        """
+        self._max_depth = depth
+        return self
+
+    def infinite_depth(self) -> "FileProcessChain":
+        """
+        无限最大递归深度
+        """
+        return self.max_depth(None)
+
+    def follow_symlinks(self) -> "FileProcessChain":
+        """
+        设置是否跟随符号链接
+        """
+        self._follow_symlinks = True
+        return self
