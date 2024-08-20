@@ -1,3 +1,4 @@
+import inspect
 import os
 from dataclasses import dataclass
 from typing import Callable, Collection
@@ -33,11 +34,12 @@ def loads_file(path: str, safely=False) -> str:
 
 
 def list_files_recursive(
-        directory: str = os.path.curdir,
-        exclude: Collection[str] | str = None,
-        file_filter: Callable[[FileInfo], bool] | Collection[
-            Callable[[FileInfo], bool]] = None,
-        safely=True,
+    directory: str = os.path.curdir,
+    exclude: Collection[str] | str = None,
+    file_filter: (
+        Callable[[FileInfo], bool] | Collection[Callable[[FileInfo], bool]]
+    ) = None,
+    safely=True,
 ) -> list[FileInfo]:
     """递归列出所有的文件，默认为当前目录下面所有文件
 
@@ -68,7 +70,7 @@ def list_files_recursive(
             full_path = os.path.join(root, file)
 
             if exclude and any(
-                    filename == name or name in full_path for name in exclude
+                filename == name or name in full_path for name in exclude
             ):
                 continue
 
@@ -103,34 +105,77 @@ def write_text(text: str, file_path: str, safely=False) -> None:
             raise e
 
 
+def get_caller_directory():
+    """
+    获取调用者目录
+    """
+    caller_frame = inspect.stack()[-1]
+    caller_filename = caller_frame.filename
+    return os.path.dirname(os.path.abspath(caller_filename))
+
+
 class FileProcessChain:
+    """
+    See list_files_recursive
+
+    Examples:
+        FileProcessChain().path('.').exclude('.git', '.idea', 'node_modules').safe_collect()
+    """
+
     def __init__(self):
-        self._path: str | None = None
+        self._path: str = get_caller_directory()
         self._safely: bool = False
         self._exclude_files: list[str] = []
         self._filters: list[Callable[[FileInfo], bool]] = []
 
-    def path(self, path: str) -> 'FileProcessChain':
-        self._path = path
+    def path(self, path: str) -> "FileProcessChain":
+        """
+        运行目录，默认为当前目录
+        """
+        caller_dir = get_caller_directory()
+        self._path = os.path.abspath(os.path.join(caller_dir, path))
         return self
 
-    def safely(self) -> 'FileProcessChain':
+    def safely(self) -> "FileProcessChain":
+        """
+        如果为true则遇见异常不会报错
+        """
         self._safely = True
         return self
 
-    def exclude(self, *name: str) -> 'FileProcessChain':
+    def exclude(self, *name: str) -> "FileProcessChain":
+        """
+        排除哪些文件，目前为简单的文件名和目录是否包含指定str排除
+
+        Examples:
+            FileProcessChain().exclude('.git', 'node_modules', '.idea')
+        """
         self._exclude_files.extend(name)
         return self
 
-    def filter(self, filter_func: Callable[[FileInfo], bool]) -> 'FileProcessChain':
+    def filter(self, filter_func: Callable[[FileInfo], bool]) -> "FileProcessChain":
+        """
+        进行高级过滤
+
+        Examples:
+            FileProcessChain().filter(lambda info: info.name != 'node_modules')
+        """
         self._filters.append(filter_func)
         return self
 
     def collect(self) -> list[FileInfo]:
+        """
+        Final方法，收集所有文件信息
+        """
         if self._path is None:
             raise Exception("path is required")
 
-        return list_files_recursive(self._path, self._exclude_files, self._filters, self._safely)
+        return list_files_recursive(
+            self._path, self._exclude_files, self._filters, self._safely
+        )
 
     def safe_collect(self) -> list[FileInfo]:
+        """
+        Final方法，默认safely
+        """
         return self.safely().collect()

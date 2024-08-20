@@ -24,12 +24,14 @@ def html_xpath_crawler(url: str, xpath: str, **kwargs) -> any:
 def json_crawler(
     url: str,
     method: str = "get",
-    getter: None
-    | str
-    | dict
-    | Collection[str | int]
-    | Collection[Collection[str | int]]
-    | Callable[[dict], any] = None,
+    getter: (
+        None
+        | str
+        | dict
+        | Collection[str | int]
+        | Collection[Collection[str | int]]
+        | Callable[[dict], any]
+    ) = None,
     **kwargs,
 ) -> any:
     """
