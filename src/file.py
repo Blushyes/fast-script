@@ -1,7 +1,7 @@
 import inspect
 import os
 from dataclasses import dataclass
-from typing import Callable, Collection
+from typing import Callable, Collection, Generator, Union
 
 
 @dataclass
@@ -12,12 +12,13 @@ class FileInfo:
     relpath: str
 
 
-def loads_file(path: str, safely=False) -> str:
+def loads_file(path: str, safely=False, encoding: str = "utf8") -> str:
     """读取某个文件的文本内容，utf-8编码
 
     Args:
         path: 文件的路径
         safely: 如果为 true 则遇见异常的时候不会报错
+        encoding: 编码
 
 
     Returns:
@@ -25,7 +26,7 @@ def loads_file(path: str, safely=False) -> str:
     """
 
     try:
-        with open(path, "r", encoding="utf8") as f:
+        with open(path, "r", encoding=encoding) as f:
             return f.read()
     except Exception as e:
         if safely:
@@ -42,7 +43,8 @@ def list_files_recursive(
     safely=True,
     max_depth: int | None = 20,
     follow_symlinks: bool = False,
-) -> list[FileInfo]:
+    use_yield: bool = False,
+) -> list[FileInfo] | Generator[FileInfo, None, None]:
     """递归列出所有的文件，默认为当前目录下面所有文件
 
     Args:
@@ -52,12 +54,12 @@ def list_files_recursive(
         safely: 如果为 true 则遇见异常的时候不会报错
         max_depth: 最大递归深度，默认为20，为None时为无限
         follow_symlinks: 是否跟随符号链接
+        use_yield: 是否使用yield返回结果，如果为True则返回生成器
 
     Returns:
-        收集到的所有文件信息
+        如果use_yield为False，返回收集到的所有文件信息列表
+        如果use_yield为True，返回一个生成器，逐个产生文件信息
     """
-    files_list = []
-
     # 转换一下参数
     if isinstance(exclude, str):
         exclude = [exclude]
@@ -65,43 +67,44 @@ def list_files_recursive(
     if isinstance(file_filter, Callable):
         file_filter = [file_filter]
 
-    # 使用os.walk遍历目录
-    for root, _, files in os.walk(directory, topdown=True, followlinks=follow_symlinks):
-        if max_depth is not None:
-            depth = root[len(directory) :].count(os.sep)
-            if depth > max_depth:
-                continue
+    def file_generator():
+        # 使用os.walk遍历目录
+        for root, _, files in os.walk(
+            directory, topdown=True, followlinks=follow_symlinks
+        ):
+            if max_depth is not None:
+                depth = root[len(directory) :].count(os.sep)
+                if depth > max_depth:
+                    continue
 
-        for file in files:
-            filename = os.path.basename(file)
+            for file in files:
+                filename = os.path.basename(file)
 
-            # 使用os.path.join拼接完整的文件路径
-            full_path = os.path.join(root, file)
+                # 使用os.path.join拼接完整的文件路径
+                full_path = os.path.join(root, file)
 
-            if exclude and any(
-                filename == name or name in full_path for name in exclude
-            ):
-                continue
+                if exclude and any(
+                    filename == name or name in full_path for name in exclude
+                ):
+                    continue
 
-            # 使用os.path.relpath获取相对路径
-            relative_path = os.path.relpath(full_path, directory)
+                # 使用os.path.relpath获取相对路径
+                relative_path = os.path.relpath(full_path, directory)
 
-            file_info = FileInfo(
-                name=filename,
-                content=loads_file(relative_path, safely),
-                abspath=full_path,
-                relpath=relative_path,
-            )
+                file_info = FileInfo(
+                    name=filename,
+                    content=loads_file(relative_path, safely),
+                    abspath=full_path,
+                    relpath=relative_path,
+                )
 
-            files_list.append(file_info)
+                if file_filter:
+                    if all(f(file_info) for f in file_filter):
+                        yield file_info
+                else:
+                    yield file_info
 
-    filtered_list = None
-    if file_filter:
-        filtered_list = files_list
-        for e in file_filter:
-            filtered_list = filter(e, filtered_list)
-
-    return list(filtered_list) if filtered_list else files_list
+    return file_generator() if use_yield else list(file_generator())
 
 
 def write_text(text: str, file_path: str, safely=False) -> None:
@@ -114,7 +117,7 @@ def write_text(text: str, file_path: str, safely=False) -> None:
             raise e
 
 
-def get_caller_directory():
+def get_caller_directory() -> str:
     """
     获取调用者目录
     """
@@ -138,6 +141,7 @@ class FileProcessChain:
         self._filters: list[Callable[[FileInfo], bool]] = []
         self._max_depth: int | None = 20
         self._follow_symlinks = False
+        self._use_yield: bool = False
 
     @staticmethod
     def _convert_size(size: str) -> float:
@@ -208,6 +212,7 @@ class FileProcessChain:
             self._safely,
             self._max_depth,
             self._follow_symlinks,
+            self._use_yield,
         )
 
     def safe_collect(self) -> list[FileInfo]:
@@ -291,4 +296,8 @@ class FileProcessChain:
         设置是否跟随符号链接
         """
         self._follow_symlinks = True
+        return self
+
+    def use_yield(self) -> "FileProcessChain":
+        self._use_yield = True
         return self
