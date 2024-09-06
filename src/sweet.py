@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Collection, Callable
 from importlib import import_module
 
@@ -49,3 +50,18 @@ def extract_json_values_by_path(data: dict | str, *path, safely: bool = True):
 
     # 从JSON数据的根部开始遍历
     return traverse(data, *path)
+
+
+def is_equivalent_naming(name1: str, name2: str) -> bool:
+    """
+    判断大小驼峰或者蛇形是否相等
+    """
+
+    def normalize(s: str) -> str:
+        # 将大驼峰和小驼峰转换为蛇形
+        s = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", s)
+        s = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s)
+        # 转换为小写
+        return s.lower()
+
+    return normalize(name1) == normalize(name2)
