@@ -28,7 +28,8 @@ def parse_time_to_ms(time_str):
         return int(value)
 
     # 转换为小写并去除复数的 's'
-    unit = unit.lower().rstrip("s")
+    if not unit == "s" and not unit == "ms":
+        unit = unit.lower().rstrip("s")
 
     if unit not in time_units:
         raise ValueError(f"Unknown time unit: {unit}")
