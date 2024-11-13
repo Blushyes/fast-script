@@ -93,7 +93,7 @@ def list_files_recursive(
 
                 file_info = FileInfo(
                     name=filename,
-                    content=loads_file(relative_path, safely),
+                    content=loads_file(full_path, safely),
                     abspath=full_path,
                     relpath=relative_path,
                 )
